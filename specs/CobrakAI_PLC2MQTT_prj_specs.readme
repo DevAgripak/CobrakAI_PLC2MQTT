@@ -20,7 +20,7 @@ La logica applicativa è contenuta nel main di run.py (if __name__ == "__main__"
 All’avvio:
 - configura logging su file rotante (log/CobrakAi.log) + console;
 - crea le directory log/ e db_buffer/ se mancanti;
-- carica config/config.ini;
+- carica config/config.yaml;
 - carica la mappatura variabili da Variabili/HMITags.xlsx;
 - carica la struttura DB da Variabili/StrutturaDb.json;
 - inizializza il driver PLC Siemens (Js7Client);
@@ -29,7 +29,7 @@ All’avvio:
 
 3) Input di configurazione
 -------------------------
-3.1 config/config.ini
+3.1 config/config.yaml
 Sezioni principali:
 - [Plc]
   - ip: indirizzo IP PLC
@@ -43,8 +43,8 @@ Sezioni principali:
   - USERNAME / PWD: credenziali
 
 - [NomiFile]
-  - fileNameDbPlc: percorso JSON con struttura dei DB PLC
-  - fileNameVar: percorso XLSX con lista variabili/tag
+-  - fileNameDbPlc: nome file JSON (in Variabili/) con struttura dei DB PLC
+-  - fileNameVar: nome file XLSX (in Variabili/) con lista variabili/tag
 
 Nota: la sezione [Database] è presente ma la sincronizzazione DB è attualmente non utilizzata operativamente.
 
@@ -155,7 +155,7 @@ Note:
 7) Topic MQTT e messaggi di stato
 --------------------------------
 Topic dati:
-- definito in config.ini: [Mqtt]/TOPIC
+- definito in config.yaml: [Mqtt]/TOPIC
 
 Topic log/stato:
 - nel codice è presente un topic hardcoded per i messaggi di log/stato:
@@ -189,7 +189,7 @@ Il progetto usa anche paho-mqtt (import in run.py). Verificare che paho-mqtt sia
 10) Struttura cartelle (principali)
 -----------------------------------
 - run.py: entry point
-- config/config.ini: configurazione
+- config/config.yaml: configurazione
 - Variabili/HMITags.xlsx: mappatura variabili/tag
 - Variabili/StrutturaDb.json: struttura DB letti dal PLC
 - Siemens_S7/: driver PLC + DLL Snap7 (Win32/Win64/Linux)

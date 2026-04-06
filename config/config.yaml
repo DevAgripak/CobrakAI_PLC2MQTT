@@ -1,0 +1,41 @@
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: agripak
+  password: Agr1pak
+  database: cobrakai
+plc:
+  ip: 10.0.0.1
+  rack: 0
+  slot: 0
+  timeupdate: 30.0
+mqtt:
+  broker: 217.112.93.9
+  port: 1883
+  topic: PLC-DATA-OPCUA-TEST
+  status_topic: '"DATA-OPCUA-TEST" o “ALARM-OPCUA-TEST”'
+  username: cobrakai
+  pwd: agripak2025
+nomifile:
+  fileNameDbPlc: StrutturaDb.json
+  fileNameVar: HMITags.xlsx
+reader:
+  mode: OPCUA
+opcua:
+  server:
+    ip: 10.0.0.1
+    port: 4840
+  client:
+    url: opc.tcp://10.0.0.1:4840/
+    commessa: ''
+    anonymous: false
+    username: Admin
+    password: '99999999'
+    security_mode: Sign & Encrypt
+    security_policy: Basic256SHA256
+    client_cert_path: OpcUa/pki/client_cert.pem
+    client_key_path: OpcUa/pki/client_key.pem
+    server_cert_path: ''
+    auto_generate_cert: 1
+test:
+  mode: run

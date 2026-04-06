@@ -3,5 +3,8 @@ pandas==2.2.3
 python-snap7==2.0.2
 paho-mqtt==2.1.0
 pyarrow==19.0.1
-opcua
+asyncua==1.1.8
 cryptography==45.0.2
+textual==0.84.0
+rich==13.9.4
+PyYAML==6.0.2
