@@ -1,0 +1,200 @@
+CobrakAI_PLC2MQTT – Specifiche di Progetto
+========================================
+
+1) Scopo
+--------
+CobrakAI_PLC2MQTT è un bridge di acquisizione dati da PLC Siemens S7 verso MQTT.
+Il programma:
+- legge ciclicamente valori da DataBlock (DB) del PLC tramite Snap7;
+- costruisce un payload JSON con timestamp e coppie nome_variabile → valore;
+- pubblica il payload su un topic MQTT;
+- quando MQTT non è raggiungibile, bufferizza i record su disco in formato Parquet;
+- quando MQTT torna online, svuota il buffer in ordine FIFO (dal più vecchio al più recente) e poi invia i dati correnti.
+
+
+2) Entry point e avvio
+---------------------
+Esecuzione: run.py
+La logica applicativa è contenuta nel main di run.py (if __name__ == "__main__":).
+
+All’avvio:
+- configura logging su file rotante (log/CobrakAi.log) + console;
+- crea le directory log/ e db_buffer/ se mancanti;
+- carica config/config.ini;
+- carica la mappatura variabili da Variabili/HMITags.xlsx;
+- carica la struttura DB da Variabili/StrutturaDb.json;
+- inizializza il driver PLC Siemens (Js7Client);
+- inizializza il client MQTT (paho-mqtt) e avvia il loop MQTT.
+
+
+3) Input di configurazione
+-------------------------
+3.1 config/config.ini
+Sezioni principali:
+- [Plc]
+  - ip: indirizzo IP PLC
+  - rack, slot: parametri di collegamento S7
+  - timeupdate: intervallo (secondi) tra due cicli di lettura/invio
+
+- [Mqtt]
+  - BROKER: host broker
+  - PORT: porta broker
+  - TOPIC: topic di pubblicazione dati
+  - USERNAME / PWD: credenziali
+
+- [NomiFile]
+  - fileNameDbPlc: percorso JSON con struttura dei DB PLC
+  - fileNameVar: percorso XLSX con lista variabili/tag
+
+Nota: la sezione [Database] è presente ma la sincronizzazione DB è attualmente non utilizzata operativamente.
+
+3.2 Variabili/HMITags.xlsx (mappatura variabili)
+Contiene i tag/variabili da leggere dal PLC.
+Colonne attese:
+- Name: nome variabile (chiave del dizionario)
+- DataType: tipo (BOOL, BYTE, INT, WORD, DINT, REAL, LREAL, STRING, ecc.)
+- Address: indirizzo PLC in formato percentuale/DB (es. %DB2000.DBX... a seconda dello standard usato nel file)
+- Length: lunghezza (usata in particolare per STRING)
+
+Il progetto carica l’Excel e costruisce una mappa:
+{ Name: { tipo: DataType, adr: Address, length: Length }, ... }
+
+3.3 Variabili/StrutturaDb.json (struttura DB da leggere)
+Definisce un elenco di aree DB da leggere con Snap7 db_read:
+- nome: alias (es. DB2000)
+- nr: numero DB (es. 2000)
+- start: offset di partenza
+- end: dimensione/limite della lettura
+
+Esempio concettuale:
+[
+  { "nome": "DB2000", "nr": 2000, "start": 0, "end": 26044 },
+  ...
+]
+
+
+4) Componenti software principali
+--------------------------------
+4.1 Siemens/ClientSiemens.py
+Classe: Js7Client
+Responsabilità:
+- caricare la libreria Snap7 appropriata (DLL/so) in base al sistema operativo e all’architettura;
+- verificare raggiungibilità del PLC con ping (checkIp);
+- connettere al PLC (s7connect);
+- leggere in blocco i DB definiti in StrutturaDb.json (read_aree_plc);
+- estrarre e convertire singoli valori dal buffer letto, in base alla mappatura (get_valorerx).
+
+Conversioni supportate (principali):
+- BOOL, BYTE, INT, WORD, DINT, REAL, LREAL, STRING
+Le conversioni restituiscono in output stringhe (per uniformità del payload).
+
+4.2 Util/Util.py
+Funzioni principali usate da run.py:
+- creaTimeStamp(): genera timestamp numerico in formato stringa "YYYYMMDDHHMMSSmmm"
+- sincronizza_mappatura_da_excel(): legge il file Excel e costruisce la mappa variabili.
+
+Nota importante:
+La funzione sincronizza_mappatura_da_excel() al momento non sincronizza più un database: la parte DB è commentata e la funzione ritorna la mappa derivata dall’Excel.
+
+4.3 Util/DataFormat.py
+Classe: FormatValue
+Responsabilità:
+- formattazioni e conversioni (es. bool→"0/1", numeri in stringhe con decimali, ecc.)
+È utilizzata dal driver Siemens per rendere consistenti i valori estratti.
+
+4.4 parquetdb/JsonToParquetHelper.py
+Classe: JsonToParquetHelper
+Responsabilità:
+- buffering locale dei record JSON in formato Parquet nella directory db_buffer/;
+- file giornalieri: buffer_YYYY-MM-DD.parquet;
+- lettura e reinvio FIFO tramite callback:
+  - legge tutti i file Parquet in ordine;
+  - per ogni record chiama una callback di publish MQTT;
+  - se un record fallisce l’invio, riscrive il file con i record rimanenti e interrompe il processamento (mantiene ordine cronologico).
+
+
+5) Flusso di esecuzione (runtime)
+--------------------------------
+Loop principale (continuo):
+1. Connessione PLC:
+   - tenta connessione S7 (con ping preventivo)
+2. Lettura PLC:
+   - legge i DB definiti in StrutturaDb.json (db_read)
+3. Costruzione record:
+   - per ogni variabile definita in HMITags.xlsx estrae e converte il valore dal buffer DB
+   - valorizza un dizionario data_var con campi fissi + mappa "data"
+4. Gestione MQTT:
+   - se client MQTT è connesso:
+     a) svuota buffer locale Parquet (FIFO), pubblicando i record su MQTT
+     b) pubblica il record corrente sul topic dati
+     c) pubblica anche un messaggio di stato su un topic di log (hardcoded)
+   - se client MQTT NON è connesso:
+     - scrive il record corrente su Parquet (buffer locale)
+5. Sleep:
+   - attende timeupdate secondi
+
+
+6) Payload dati pubblicato su MQTT
+---------------------------------
+Il payload principale è un JSON serializzato con la seguente struttura:
+{
+  "client_id": "CI2306-P01",
+  "timestamp": "<YYYYMMDDHHMMSSmmm>",
+  "data": {
+    "<Name>": "<valore>",
+    "<Name2>": "<valore2>",
+    ...
+  }
+}
+
+Note:
+- timestamp è un valore generato localmente (non necessariamente quello del PLC).
+- ogni valore viene convertito in stringa.
+
+
+7) Topic MQTT e messaggi di stato
+--------------------------------
+Topic dati:
+- definito in config.ini: [Mqtt]/TOPIC
+
+Topic log/stato:
+- nel codice è presente un topic hardcoded per i messaggi di log/stato:
+  "Agripak/plc_log-TEST"
+- viene impostato anche un LWT (will_set) per segnalare disconnessione inattesa.
+
+
+8) Persistenza locale (buffer) e recupero
+-----------------------------------------
+Quando MQTT non è connesso:
+- ogni record viene salvato in db_buffer/buffer_YYYY-MM-DD.parquet
+
+Quando MQTT è connesso:
+- prima dell’invio del record corrente, il programma tenta di inviare i record presenti nel buffer;
+- l’invio avviene in ordine cronologico (per nome file + ordine record nel file);
+- se l’invio fallisce, i record non inviati restano nel file e verranno riprovati al prossimo ciclo.
+
+
+9) Dipendenze
+-------------
+Librerie principali (requirements.txt):
+- pandas, openpyxl: lettura Excel
+- python-snap7: comunicazione PLC Siemens S7
+- pyarrow: Parquet (lettura/scrittura buffer)
+- numpy, python-dateutil, pytz, tzdata, ecc.
+
+Nota:
+Il progetto usa anche paho-mqtt (import in run.py). Verificare che paho-mqtt sia installato nell’ambiente di esecuzione, anche se non compare nel requirements.txt.
+
+
+10) Struttura cartelle (principali)
+-----------------------------------
+- run.py: entry point
+- config/config.ini: configurazione
+- Variabili/HMITags.xlsx: mappatura variabili/tag
+- Variabili/StrutturaDb.json: struttura DB letti dal PLC
+- Siemens_S7/: driver PLC + DLL Snap7 (Win32/Win64/Linux)
+- Util/: utility timestamp, parsing, formattazioni
+- parquetdb/: buffering Parquet e reinvio FIFO
+- log/: log applicativi
+- db_buffer/: buffer dati Parquet (generato a runtime)
+

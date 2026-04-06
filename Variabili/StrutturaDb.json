@@ -1,0 +1,54 @@
+{
+    "strutturadb": [
+        {
+            "tipo": "DB",
+            "nome": "DB2000",
+            "nr": 2000,
+            "start": 0,
+            "end": 26044
+        },
+        {
+            "tipo": "DB",
+            "nome": "DB2003",
+            "nr": 2003,
+            "start": 0,
+            "end": 316
+        },
+           {
+            "tipo": "DB",
+            "nome": "DB2004",
+            "nr": 2004,
+            "start": 0,
+            "end": 112
+        },
+        {
+            "tipo": "DB",
+            "nome": "DB2005",
+            "nr": 2005,
+            "start": 0,
+            "end": 54
+        },
+      {
+            "tipo": "DB",
+            "nome": "DB2006",
+            "nr": 2006,
+            "start": 0,
+            "end": 912
+        },
+          {
+            "tipo": "DB",
+            "nome": "DB2007",
+            "nr": 2007,
+            "start": 0,
+            "end": 446
+        },
+       {
+            "tipo": "DB",
+            "nome": "DB91",
+            "nr": 91,
+            "start": 0,
+            "end": 72
+        }
+      
+    ]
+}
